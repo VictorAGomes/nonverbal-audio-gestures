@@ -28,7 +28,6 @@ def spectrogram_to_image(S_db, target_size=IMG_SIZE):
     canvas.draw()
     w, h = canvas.get_width_height()
 
-    # Tenta diferentes APIs de buffer conforme disponível
     try:
         buf = canvas.tostring_rgb()
         img_arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)

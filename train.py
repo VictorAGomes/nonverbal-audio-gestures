@@ -20,14 +20,12 @@ from config import SR, DURATION, N_FFT, HOP_LENGTH, N_MELS, IMG_SIZE, CLASSES, N
 # 2. NORMALIZAÇÃO E AUGMENTATION 
 def load_and_normalize(path, sr=SR, duration=DURATION):
     y, sr = librosa.load(path, sr=sr, duration=duration, mono=True)
-    # Pad ou trim para duração fixa (apenas se duration for especificado)
     if duration is not None:
         target_length = int(sr * duration)
         if len(y) < target_length:
             y = np.pad(y, (0, target_length - len(y)), 'constant')
         else:
             y = y[:target_length]
-    # Normalização
     max_val = np.max(np.abs(y)) + 1e-9
     y = y / max_val
     return y, sr
@@ -60,7 +58,6 @@ def augment_audio(y, sr):
         y_aug = add_background_noise(y_aug)
     return y_aug
 
-# 3. EXTRACAO DE MEL-SPECTROGRAMA
 def extract_mel_spectrogram(y, sr):
     S = librosa.feature.melspectrogram(
         y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LENGTH, n_mels=N_MELS
@@ -284,13 +281,7 @@ def train_model(data_dir, epochs=40, batch_size=32, lr=0.0005):
 # 8. EXECUÇÃO PRINCIPAL
 # =============================================================================
 if __name__ == "__main__":
-    # CRIE A ESTRUTURA:
-    # data/
-    # ├── whistle/*.wav
-    # ├── click/*.wav  
-    # └── blow/*.wav
-    
-    data_dir = "data"  # Ajuste o caminho
+    data_dir = "data" 
     
     print("🚀 Iniciando treinamento Non-Verbal Audio CNN...")
     print(f"Classes: {CLASSES}")

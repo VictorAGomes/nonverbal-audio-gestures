@@ -25,7 +25,6 @@ class AudioApp:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.load_model()
 
-        # --- INTERFACE ---
         self.setup_ui()
 
     def load_model(self):
@@ -102,11 +101,8 @@ class AudioApp:
     def process_and_predict(self):
         if not self.audio_buffer: return
 
-        # 1. Concatena os pedaços de áudio gravados
         audio_data = np.concatenate(self.audio_buffer, axis=0).flatten()
 
-        # 2. Pré-processamento (Igual ao utils.py)
-        # Normalização do áudio bruto
         max_val = np.max(np.abs(audio_data)) + 1e-9
         audio_data = audio_data / max_val
 
@@ -117,15 +113,12 @@ class AudioApp:
         )
         S_db = librosa.power_to_db(S, ref=np.max)
 
-        # 3. Transforma em imagem (IMPORTADO DO UTILS)
         img = spectrogram_to_image(S_db)
 
-        # 4. Prepara para PyTorch (0-1, Transpose, Batch)
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1)) # (C, H, W)
         input_tensor = torch.tensor(img).unsqueeze(0).to(self.device)
 
-        # 5. Inferência
         with torch.no_grad():
             outputs = self.model(input_tensor)
             probs = torch.nn.functional.softmax(outputs, dim=1)

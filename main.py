@@ -2,25 +2,23 @@ import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
+from config import SR, N_FFT, HOP_LENGTH, N_MELS
 
 # 1. Caminho do arquivo de áudio (.wav, .mp3, etc.)
 audio_path = "WhatsApp Audio 2025-11-26 at 22.05.47.opus"  # troque pelo seu arquivo
 
 # 2. Carregar o áudio (mono, 16 kHz)
-y, sr = librosa.load(audio_path, sr=16000, mono=True)
+y, sr = librosa.load(audio_path, sr=SR, mono=True)
 print(f"Shape do sinal: {y.shape}, Sample rate: {sr}")
 
 # 3. Calcular o mel-spectrograma
-n_fft = 1024        # tamanho da janela FFT
-hop_length = 256    # passo entre janelas
-n_mels = 128        # número de bandas mel
 
 S = librosa.feature.melspectrogram(
     y=y,
     sr=sr,
-    n_fft=n_fft,
-    hop_length=hop_length,
-    n_mels=n_mels,
+    n_fft=N_FFT,
+    hop_length=HOP_LENGTH,
+    n_mels=N_MELS,
     fmin=0,
     fmax=sr // 2
 )
@@ -35,7 +33,7 @@ plt.figure(figsize=(10, 4))
 librosa.display.specshow(
     S_db,
     sr=sr,
-    hop_length=hop_length,
+    hop_length=HOP_LENGTH,
     x_axis="time",
     y_axis="mel"
 )

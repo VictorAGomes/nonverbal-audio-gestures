@@ -290,6 +290,6 @@ if __name__ == "__main__":
     
     model, history = train_model(data_dir, epochs=50, batch_size=32)
     
-    print("\n✅ Treinamento concluído!")
+    print("\nTreinamento concluído!")
     print("Modelo salvo como: best_nonverbal_model.pth")
     print("Confusion Matrix salva como: confusion_matrix.png")

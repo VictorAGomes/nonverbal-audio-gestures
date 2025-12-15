@@ -20,12 +20,13 @@ from config import SR, DURATION, N_FFT, HOP_LENGTH, N_MELS, IMG_SIZE, CLASSES, N
 # 2. NORMALIZAÇÃO E AUGMENTATION 
 def load_and_normalize(path, sr=SR, duration=DURATION):
     y, sr = librosa.load(path, sr=sr, duration=duration, mono=True)
-    # Pad ou trim para duração fixa
-    target_length = int(sr * duration)
-    if len(y) < target_length:
-        y = np.pad(y, (0, target_length - len(y)), 'constant')
-    else:
-        y = y[:target_length]
+    # Pad ou trim para duração fixa (apenas se duration for especificado)
+    if duration is not None:
+        target_length = int(sr * duration)
+        if len(y) < target_length:
+            y = np.pad(y, (0, target_length - len(y)), 'constant')
+        else:
+            y = y[:target_length]
     # Normalização
     max_val = np.max(np.abs(y)) + 1e-9
     y = y / max_val
@@ -94,7 +95,7 @@ class AudioDataset(Dataset):
         S_db = extract_mel_spectrogram(y, sr)
         
         # Converte para imagem
-        image = spectrogram_to_image(S_db, sr=sr, hop_length=HOP_LENGTH, target_size=IMG_SIZE)
+        image = spectrogram_to_image(S_db)
         
         # Normaliza para [0,1]
         image = image.astype(np.float32) / 255.0
@@ -146,7 +147,7 @@ def load_dataset(data_dir):
     return filepaths, labels
 
 # TREINAMENTO
-def train_model(data_dir, epochs=50, batch_size=32, lr=0.001):
+def train_model(data_dir, epochs=40, batch_size=32, lr=0.0005):
     # Carrega dados
     filepaths, labels = load_dataset(data_dir)
     

@@ -5,7 +5,7 @@ Centralizando todas as constantes para garantir consistência entre treino e inf
 
 # Parâmetros de áudio
 SR = 16000              # Sample rate
-DURATION = 1.0          # Duração em segundos
+DURATION = None         # Duração em segundos (None = usa duração total do áudio)
 
 # Parâmetros de espectrograma
 N_FFT = 1024            # Tamanho FFT
@@ -16,6 +16,6 @@ N_MELS = 128            # Bandas Mel
 IMG_SIZE = (128, 128)   # Tamanho final da imagem (altura, largura)
 
 # Classes
-CLASSES = ['assobio', 'dedo']
+CLASSES = ['assobio', 'dedo', 'palma']
 NUM_CLASSES = len(CLASSES)
 CLASS_TO_IDX = {cls: i for i, cls in enumerate(CLASSES)}

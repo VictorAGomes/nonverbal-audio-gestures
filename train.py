@@ -13,18 +13,9 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 from tqdm import tqdm
 
-# CONFIGURAÇÕES GLOBAIS
-
-SR = 16000              # Sample rate
-DURATION = 1.0          # Duração em segundos
-N_FFT = 1024            # Tamanho FFT
-HOP_LENGTH = 256        # Passo entre janelas
-N_MELS = 128            # Bandas Mel
-IMG_SIZE = (128, 128)   # Tamanho final da imagem
-
-CLASSES = ['assobio', 'dedo']
-NUM_CLASSES = len(CLASSES)
-CLASS_TO_IDX = {cls: i for i, cls in enumerate(CLASSES)}
+from model import NonVerbalCNN
+from spectrogram_utils import spectrogram_to_image
+from config import SR, DURATION, N_FFT, HOP_LENGTH, N_MELS, IMG_SIZE, CLASSES, NUM_CLASSES, CLASS_TO_IDX
 
 # 2. NORMALIZAÇÃO E AUGMENTATION 
 def load_and_normalize(path, sr=SR, duration=DURATION):
@@ -76,39 +67,6 @@ def extract_mel_spectrogram(y, sr):
     S_db = librosa.power_to_db(S, ref=np.max)
     return S_db
 
-def spectrogram_to_image(S_db, target_size=IMG_SIZE):
-    """Renderiza o espectrograma para uma imagem RGB de tamanho target_size.
-    Compatível com diferentes backends matplotlib no macOS."""
-    from matplotlib.figure import Figure
-    from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-    from PIL import Image
-
-    fig = Figure(figsize=(target_size[1] / 100, target_size[0] / 100), dpi=100)
-    canvas = FigureCanvas(fig)
-    ax = fig.add_subplot(111)
-    ax.axis('off')
-    librosa.display.specshow(S_db, sr=SR, hop_length=HOP_LENGTH, ax=ax)
-    fig.tight_layout(pad=0)
-
-    canvas.draw()
-    w, h = canvas.get_width_height()
-
-    # Tenta diferentes APIs de buffer conforme disponível
-    try:
-        buf = canvas.tostring_rgb()
-        img_arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)
-    except AttributeError:
-        try:
-            buf = canvas.buffer_rgba()
-            img_arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)[..., :3]
-        except Exception:
-            buf = canvas.tostring_argb()
-            arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
-            img_arr = arr[..., 1:4]
-
-    pil = Image.fromarray(img_arr)
-    pil = pil.resize((target_size[1], target_size[0]), Image.BICUBIC)
-    return np.array(pil)
 
 # DATASET PYTORCH
 class AudioDataset(Dataset):
@@ -136,7 +94,7 @@ class AudioDataset(Dataset):
         S_db = extract_mel_spectrogram(y, sr)
         
         # Converte para imagem
-        image = spectrogram_to_image(S_db)
+        image = spectrogram_to_image(S_db, sr=sr, hop_length=HOP_LENGTH, target_size=IMG_SIZE)
         
         # Normaliza para [0,1]
         image = image.astype(np.float32) / 255.0
@@ -146,46 +104,7 @@ class AudioDataset(Dataset):
         
         return torch.tensor(image), torch.tensor(label)
 
-# MODELO CNN
-class NonVerbalCNN(nn.Module):
-    def __init__(self, num_classes=NUM_CLASSES):
-        super(NonVerbalCNN, self).__init__()
-        
-        self.conv_layers = nn.Sequential(
-            # Conv1: 3->32
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            
-            # Conv2: 32->64
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            
-            # Conv3: 64->128
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            
-            # Conv4: 128->256
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-        )
-        
-        self.fc_layers = nn.Sequential(
-            nn.Dropout(0.3),
-            nn.Linear(256 * 8 * 8, 512),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes)
-        )
-    
-    def forward(self, x):
-        x = self.conv_layers(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc_layers(x)
-        return x
+
 
 # CARREGAR DATASET
 def load_dataset(data_dir):
@@ -252,7 +171,7 @@ def train_model(data_dir, epochs=50, batch_size=32, lr=0.001):
     
     # Modelo, loss, otimizador
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = NonVerbalCNN().to(device)
+    model = NonVerbalCNN(num_classes=NUM_CLASSES).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)

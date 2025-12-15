@@ -7,7 +7,8 @@ import librosa
 import threading
 
 from model import NonVerbalCNN
-import utils 
+from config import SR, N_FFT, HOP_LENGTH, N_MELS, CLASSES
+from spectrogram_utils import spectrogram_to_image 
 
 class AudioApp:
     def __init__(self, root):
@@ -31,7 +32,7 @@ class AudioApp:
         print("Carregando modelo...")
         try:
             # Instancia usando a classe importada de model.py
-            self.model = NonVerbalCNN(num_classes=len(utils.CLASSES))
+            self.model = NonVerbalCNN(num_classes=len(CLASSES))
             
             # Carrega os pesos
             self.model.load_state_dict(torch.load('best_nonverbal_model.pth', map_location=self.device))
@@ -84,7 +85,7 @@ class AudioApp:
         
         # Inicia stream do sounddevice
         self.stream = sd.InputStream(callback=self.audio_callback, 
-                                     channels=1, samplerate=utils.SR)
+                                     channels=1, samplerate=SR)
         self.stream.start()
 
     def stop_rec(self, event):
@@ -111,13 +112,13 @@ class AudioApp:
 
         # Gera Mel-Spectrograma
         S = librosa.feature.melspectrogram(
-            y=audio_data, sr=utils.SR, 
-            n_fft=utils.N_FFT, hop_length=utils.HOP_LENGTH, n_mels=utils.N_MELS
+            y=audio_data, sr=SR, 
+            n_fft=N_FFT, hop_length=HOP_LENGTH, n_mels=N_MELS
         )
         S_db = librosa.power_to_db(S, ref=np.max)
 
         # 3. Transforma em imagem (IMPORTADO DO UTILS)
-        img = utils.spectrogram_to_image(S_db)
+        img = spectrogram_to_image(S_db)
 
         # 4. Prepara para PyTorch (0-1, Transpose, Batch)
         img = img.astype(np.float32) / 255.0
@@ -134,7 +135,7 @@ class AudioApp:
         idx = predicted_idx.item()
         conf_val = confidence.item()
         
-        classe_nome = utils.CLASSES[idx].upper()
+        classe_nome = CLASSES[idx].upper()
         
         self.root.after(0, lambda: self.update_labels(classe_nome, conf_val))
 

@@ -281,7 +281,7 @@ def train_model(data_dir, epochs=40, batch_size=32, lr=0.0005):
 # 8. EXECUÇÃO PRINCIPAL
 # =============================================================================
 if __name__ == "__main__":
-    data_dir = "data" 
+    data_dir = "data_recanvo" 
     
     print("🚀 Iniciando treinamento Non-Verbal Audio CNN...")
     print(f"Classes: {CLASSES}")

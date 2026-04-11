@@ -16,6 +16,29 @@ N_MELS = 128            # Bandas Mel
 IMG_SIZE = (128, 128)   # Tamanho final da imagem (altura, largura)
 
 # Classes
-CLASSES = ['assobio', 'dedo', 'palma']
+CLASSES = [
+    "selftalk",
+    "frustrated",
+    "delighted",
+    "dysregulated",
+    "social",
+    "request",
+    "affectionate",
+    "yes",
+    "laughter",
+    "dysregulation-sick",
+    "happy",
+    "help",
+    "more",
+    "protest",
+    "bathroom",
+    "dysregulation-bathroom",
+    "no",
+    "glee",
+    "laugh",
+    "tablet",
+    "hunger",
+    "greeting"
+]
 NUM_CLASSES = len(CLASSES)
 CLASS_TO_IDX = {cls: i for i, cls in enumerate(CLASSES)}

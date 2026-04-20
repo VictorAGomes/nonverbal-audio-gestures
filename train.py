@@ -18,11 +18,33 @@ from spectrogram_utils import spectrogram_to_image
 from config import SR, DURATION, N_FFT, HOP_LENGTH, N_MELS, IMG_SIZE, CLASSES, NUM_CLASSES, CLASS_TO_IDX
 
 # =============================================================================
-# REPRODUTIBILIDADE
+# REPRODUTIBILIDADE E HIPERPARÂMETROS
 # =============================================================================
-SEED = 42
+SEED                    = 42
+EARLY_STOPPING_PATIENCE = 10    # epochs sem melhora antes de parar
+EARLY_STOPPING_MIN_DELTA = 1e-4 # melhora mínima considerada significativa
+
 np.random.seed(SEED)
 torch.manual_seed(SEED)
+
+
+class EarlyStopping:
+    """Para o treino quando val_loss não melhora por `patience` epochs consecutivos."""
+    def __init__(self, patience=EARLY_STOPPING_PATIENCE, min_delta=EARLY_STOPPING_MIN_DELTA):
+        self.patience   = patience
+        self.min_delta  = min_delta
+        self.counter    = 0
+        self.best_loss  = None
+        self.should_stop = False
+
+    def step(self, val_loss):
+        if self.best_loss is None or val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter   = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.should_stop = True
 
 # =============================================================================
 # PRÉ-PROCESSAMENTO E AUGMENTATION
@@ -148,6 +170,7 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
     best_val_acc   = 0.0
     checkpoint     = f'fold{fold_id}_{representation}.pth'
     train_losses, val_losses, train_accs, val_accs = [], [], [], []
+    early_stopping = EarlyStopping()
 
     for epoch in range(epochs):
         # — Treino —
@@ -184,12 +207,18 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
         train_accs.append(t_acc);     val_accs.append(v_acc)
         scheduler.step(v_loss)
 
-        print(f'  Fold {fold_id} | Epoch {epoch+1}/{epochs} | '
-              f'Train {t_acc:.1f}% / Val {v_acc:.1f}%')
-
         if v_acc > best_val_acc:
             best_val_acc = v_acc
             torch.save(model.state_dict(), checkpoint)
+
+        early_stopping.step(v_loss)
+        print(f'  Fold {fold_id} | Epoch {epoch+1}/{epochs} | '
+              f'Train {t_acc:.1f}% / Val {v_acc:.1f}% | '
+              f'ES {early_stopping.counter}/{early_stopping.patience}')
+
+        if early_stopping.should_stop:
+            print(f'  Early stopping na epoch {epoch+1}.')
+            break
 
     # — Predições no val com o melhor checkpoint —
     model.load_state_dict(torch.load(checkpoint, map_location=device))
@@ -316,6 +345,7 @@ def _save_best_model(filepaths, labels, skf, best_fold_idx,
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
     best_acc  = 0.0
     save_path = f'best_{representation}.pth'
+    early_stopping = EarlyStopping()
 
     for epoch in range(epochs):
         model.train()
@@ -335,11 +365,19 @@ def _save_best_model(filepaths, labels, skf, best_fold_idx,
                 v_loss += criterion(out, labels_b).item()
                 correct += (out.argmax(1) == labels_b).sum().item()
                 total   += labels_b.size(0)
-        v_acc = 100 * correct / total
-        scheduler.step(v_loss / len(val_loader))
+
+        v_loss_epoch = v_loss / len(val_loader)
+        v_acc        = 100 * correct / total
+        scheduler.step(v_loss_epoch)
+
         if v_acc > best_acc:
             best_acc = v_acc
             torch.save(model.state_dict(), save_path)
+
+        early_stopping.step(v_loss_epoch)
+        if early_stopping.should_stop:
+            print(f'  Early stopping na epoch {epoch+1}.')
+            break
 
     print(f'Modelo final salvo: {save_path} (val acc: {best_acc:.2f}%)')
 
@@ -347,12 +385,15 @@ def _save_best_model(filepaths, labels, skf, best_fold_idx,
 # CURVAS DE APRENDIZADO
 # =============================================================================
 def plot_learning_curves(fold_histories, representation):
-    """Plota curvas de loss e acurácia (média ± desvio padrão entre folds)."""
-    epochs = len(fold_histories[0]['train_losses'])
-    x      = np.arange(1, epochs + 1)
+    """Plota curvas de loss e acurácia (média ± desvio padrão entre folds).
+    Folds com early stopping têm curvas mais curtas — usa o mínimo de epochs
+    comuns a todos os folds para o cálculo da banda de desvio.
+    """
+    min_epochs = min(len(h['train_losses']) for h in fold_histories)
+    x          = np.arange(1, min_epochs + 1)
 
     def mean_std(key):
-        mat = np.array([h[key] for h in fold_histories])
+        mat = np.array([h[key][:min_epochs] for h in fold_histories])
         return mat.mean(axis=0), mat.std(axis=0)
 
     t_loss_m, t_loss_s = mean_std('train_losses')

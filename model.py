@@ -1,6 +1,5 @@
 import torch.nn as nn
 
-
 class NonVerbalCNN(nn.Module):
     """CNN customizada com 4 blocos convolucionais e BatchNorm.
     Entrada: imagem RGB 128x128 (3 x 128 x 128).

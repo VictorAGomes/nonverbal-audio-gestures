@@ -1,46 +1,58 @@
 import numpy as np
 import librosa
-import librosa.display
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from PIL import Image
-from config import SR, HOP_LENGTH, IMG_SIZE
+import torch
+import torch.nn.functional as F
+from config import IMG_SIZE
 
 
-def spectrogram_to_image(S_db, target_size=IMG_SIZE):
-    """Renderiza o espectrograma para uma imagem RGB de tamanho target_size.
-    Compatível com diferentes backends matplotlib no macOS.
-    
-    Args:
-        S_db: Mel-spectrograma em dB (array 2D)
-        target_size: Tupla (altura, largura) para o tamanho final da imagem
-        
-    Returns:
-        Array numpy com shape (altura, largura, 3) representando a imagem RGB
+def _normalize_channel(arr):
+    """Normaliza um array 2D para float32 no intervalo [0, 1]."""
+    arr_min, arr_max = arr.min(), arr.max()
+    return ((arr - arr_min) / (arr_max - arr_min + 1e-9)).astype(np.float32)
+
+
+def _resize(rgb_hwc, target_size):
+    """Redimensiona array (H, W, 3) float32 via interpolação bilinear.
+    Usa torch.nn.functional.interpolate — sem dependência de PIL.
     """
-    fig = Figure(figsize=(target_size[1] / 100, target_size[0] / 100), dpi=100)
-    canvas = FigureCanvas(fig)
-    ax = fig.add_subplot(111)
-    ax.axis('off')
-    librosa.display.specshow(S_db, sr=SR, hop_length=HOP_LENGTH, ax=ax)
-    fig.tight_layout(pad=0)
+    t = torch.from_numpy(rgb_hwc).permute(2, 0, 1).unsqueeze(0)  # (1, 3, H, W)
+    t = F.interpolate(t, size=target_size, mode='bilinear', align_corners=False)
+    return t.squeeze(0).permute(1, 2, 0).numpy()                  # (H, W, 3)
 
-    canvas.draw()
-    w, h = canvas.get_width_height()
 
-    try:
-        buf = canvas.tostring_rgb()
-        img_arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)
-    except AttributeError:
-        try:
-            buf = canvas.buffer_rgba()
-            img_arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)[..., :3]
-        except Exception:
-            buf = canvas.tostring_argb()
-            arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
-            img_arr = arr[..., 1:4]
+def spectrogram_to_image(S_db, target_size=IMG_SIZE, representation='delta_delta'):
+    """Converte um Mel-espectrograma em dB para um array float32 (H, W, 3) em [0, 1].
 
-    pil = Image.fromarray(img_arr)
-    pil = pil.resize((target_size[1], target_size[0]), Image.BICUBIC)
-    return np.array(pil)
+    Representações disponíveis:
+      'mel'         -> R=G=B=S_db  (apenas espectrograma, escala de cinza como RGB)
+      'delta'       -> R=S_db, G=delta, B=delta    (dinâmica de 1ª ordem)
+      'delta_delta' -> R=S_db, G=delta, B=delta2   (representação completa)
 
+    Cada canal é normalizado independentemente para [0, 1] em float32.
+    Sem quantização para uint8 — precisão contínua preservada.
+    """
+    if representation == 'mel':
+        ch  = _normalize_channel(S_db)
+        rgb = np.stack([ch, ch, ch], axis=-1)
+
+    elif representation == 'delta':
+        delta = librosa.feature.delta(S_db)
+        r = _normalize_channel(S_db)
+        g = _normalize_channel(delta)
+        rgb = np.stack([r, g, g], axis=-1)
+
+    elif representation == 'delta_delta':
+        delta  = librosa.feature.delta(S_db)
+        delta2 = librosa.feature.delta(S_db, order=2)
+        r = _normalize_channel(S_db)
+        g = _normalize_channel(delta)
+        b = _normalize_channel(delta2)
+        rgb = np.stack([r, g, b], axis=-1)
+
+    else:
+        raise ValueError(
+            f"representation deve ser 'mel', 'delta' ou 'delta_delta'. "
+            f"Recebido: '{representation}'"
+        )
+
+    return _resize(rgb, target_size)

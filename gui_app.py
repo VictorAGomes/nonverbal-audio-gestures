@@ -64,7 +64,7 @@ class AudioApp:
         try:
             self.model = NonVerbalCNN(num_classes=NUM_CLASSES)
             self.model.load_state_dict(
-                torch.load(CHECKPOINT_PATH, map_location=self.device)
+                torch.load(CHECKPOINT_PATH, weights_only=True, map_location=self.device)
             )
             self.model.to(self.device)
             self.model.eval()

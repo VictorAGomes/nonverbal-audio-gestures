@@ -49,6 +49,7 @@ class EarlyStopping:
 # =============================================================================
 # PRÉ-PROCESSAMENTO E AUGMENTATION
 # =============================================================================
+
 def load_and_normalize(path, sr=SR, duration=DURATION):
     """Carrega áudio completo, aplica pad simétrico ou crop centralizado."""
     y, sr = librosa.load(path, sr=sr, mono=True)
@@ -84,9 +85,9 @@ def add_background_noise(y, noise_level_db_range=(-25, -15)):
 
 def augment_audio(y, sr):
     y = y.copy()
-    if np.random.rand() < 0.7: y = random_time_shift(y)
-    if np.random.rand() < 0.5: y = random_pitch_shift(y, sr)
-    if np.random.rand() < 0.8: y = add_background_noise(y)
+    if np.random.rand() < 0.5: y = random_time_shift(y)
+    if np.random.rand() < 0.4: y = random_pitch_shift(y, sr)
+    if np.random.rand() < 0.5: y = add_background_noise(y)
     return y
 
 def extract_mel_spectrogram(y, sr):
@@ -167,7 +168,8 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
 
-    best_val_acc   = 0.0
+    best_val_loss  = float('inf')
+    best_val_acc   = 0.0          # acurácia na epoch de menor val_loss
     checkpoint     = f'fold{fold_id}_{representation}.pth'
     train_losses, val_losses, train_accs, val_accs = [], [], [], []
     early_stopping = EarlyStopping()
@@ -207,8 +209,10 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
         train_accs.append(t_acc);     val_accs.append(v_acc)
         scheduler.step(v_loss)
 
-        if v_acc > best_val_acc:
-            best_val_acc = v_acc
+        # Critério único: salva quando val_loss melhora (consistente com early stopping)
+        if v_loss < best_val_loss:
+            best_val_loss = v_loss
+            best_val_acc  = v_acc
             torch.save(model.state_dict(), checkpoint)
 
         early_stopping.step(v_loss)
@@ -221,7 +225,7 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
             break
 
     # — Predições no val com o melhor checkpoint —
-    model.load_state_dict(torch.load(checkpoint, map_location=device))
+    model.load_state_dict(torch.load(checkpoint, weights_only=True, map_location=device))
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
@@ -231,12 +235,12 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
             all_preds.extend(preds)
             all_labels.extend(labels_b.numpy())
 
-    os.remove(checkpoint)   # limpa checkpoint temporário do fold
-
+    # Checkpoint mantido — será limpo em train_model_kfold após selecionar o melhor fold
     return {
         'train_losses': train_losses, 'val_losses': val_losses,
         'train_accs':   train_accs,   'val_accs':   val_accs,
         'best_val_acc': best_val_acc,
+        'checkpoint':   checkpoint,
         'preds':        all_preds,
         'labels':       all_labels,
     }
@@ -303,12 +307,15 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
     print(f'\n[{representation}] CV Acc: {cv_acc_mean:.2f}% ± {cv_acc_std:.2f}%')
     print(classification_report(all_labels, all_preds, target_names=CLASSES, zero_division=0))
 
-    # — Salva o melhor fold como checkpoint final —
+    # — Promove o melhor fold; descarta os demais —
     best_fold_idx = int(np.argmax(fold_accs))
-    _save_best_model(
-        filepaths, labels, skf, best_fold_idx,
-        epochs, batch_size, lr, representation,
-    )
+    final_path    = f'best_{representation}.pth'
+    for i, h in enumerate(fold_histories):
+        if i == best_fold_idx:
+            os.rename(h['checkpoint'], final_path)
+            print(f'Checkpoint final: {final_path} (fold {i+1}, val acc: {fold_accs[i]:.2f}%)')
+        else:
+            os.remove(h['checkpoint'])
 
     return {
         'representation': representation,
@@ -320,66 +327,6 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
         'all_labels':     all_labels,
     }
 
-
-def _save_best_model(filepaths, labels, skf, best_fold_idx,
-                     epochs, batch_size, lr, representation):
-    """Re-treina o melhor fold e salva como best_{representation}.pth."""
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    splits = list(skf.split(filepaths, labels))
-    train_idx, val_idx = splits[best_fold_idx]
-
-    train_loader = DataLoader(
-        AudioDataset(filepaths[train_idx].tolist(), labels[train_idx].tolist(),
-                     augment=True, representation=representation),
-        batch_size=batch_size, shuffle=True
-    )
-    val_loader = DataLoader(
-        AudioDataset(filepaths[val_idx].tolist(), labels[val_idx].tolist(),
-                     augment=False, representation=representation),
-        batch_size=batch_size, shuffle=False
-    )
-
-    model     = NonVerbalCNN(num_classes=NUM_CLASSES).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
-    best_acc  = 0.0
-    save_path = f'best_{representation}.pth'
-    early_stopping = EarlyStopping()
-
-    for epoch in range(epochs):
-        model.train()
-        for images, labels_b in train_loader:
-            images, labels_b = images.to(device), labels_b.to(device)
-            optimizer.zero_grad()
-            loss = criterion(model(images), labels_b)
-            loss.backward()
-            optimizer.step()
-
-        model.eval()
-        correct, total, v_loss = 0, 0, 0.0
-        with torch.no_grad():
-            for images, labels_b in val_loader:
-                images, labels_b = images.to(device), labels_b.to(device)
-                out    = model(images)
-                v_loss += criterion(out, labels_b).item()
-                correct += (out.argmax(1) == labels_b).sum().item()
-                total   += labels_b.size(0)
-
-        v_loss_epoch = v_loss / len(val_loader)
-        v_acc        = 100 * correct / total
-        scheduler.step(v_loss_epoch)
-
-        if v_acc > best_acc:
-            best_acc = v_acc
-            torch.save(model.state_dict(), save_path)
-
-        early_stopping.step(v_loss_epoch)
-        if early_stopping.should_stop:
-            print(f'  Early stopping na epoch {epoch+1}.')
-            break
-
-    print(f'Modelo final salvo: {save_path} (val acc: {best_acc:.2f}%)')
 
 # =============================================================================
 # CURVAS DE APRENDIZADO

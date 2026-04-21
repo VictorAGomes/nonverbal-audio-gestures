@@ -1,8 +1,10 @@
 import torch.nn as nn
 
+
 class NonVerbalCNN(nn.Module):
-    """CNN customizada com 4 blocos convolucionais e BatchNorm.
-    Entrada: imagem RGB 128x128 (3 x 128 x 128).
+    """CNN customizada com 4 blocos convolucionais, BatchNorm e Global Average Pooling.
+    Entrada: tensor RGB (3 x 128 x 128).
+    GAP substitui o flatten, reduzindo de 16.384 para 256 features na camada FC.
     """
     def __init__(self, num_classes=3):
         super(NonVerbalCNN, self).__init__()
@@ -33,17 +35,18 @@ class NonVerbalCNN(nn.Module):
             nn.MaxPool2d(2),
         )
 
-        # Após 4x MaxPool2d(2): 128 → 8  →  256 * 8 * 8 = 16.384
+        # Global Average Pooling: (256, 8, 8) → (256, 1, 1) → (256,)
+        self.gap = nn.AdaptiveAvgPool2d(1)
+
+        # FC com 256 features (vs 16.384 com flatten)
         self.fc_layers = nn.Sequential(
             nn.Dropout(0.3),
-            nn.Linear(256 * 8 * 8, 512),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes),
+            nn.Linear(256, num_classes),
         )
 
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.view(x.size(0), -1)
+        x = self.gap(x)
+        x = x.view(x.size(0), -1)  # (batch, 256)
         x = self.fc_layers(x)
         return x

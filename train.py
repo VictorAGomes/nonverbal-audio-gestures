@@ -254,7 +254,8 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
 
     best_val_loss  = float('inf')
     best_val_acc   = 0.0          # acurácia na epoch de menor val_loss
-    checkpoint     = f'fold{fold_id}_{representation}.pth'
+    exp_name = f"{arch_config['name']}_{representation}" if arch_config else representation
+    checkpoint = f'fold{fold_id}_{exp_name}.pth'
     train_losses, val_losses, train_accs, val_accs = [], [], [], []
     early_stopping = EarlyStopping()
 
@@ -339,6 +340,7 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
     Returns:
         dict com métricas agregadas, históricos de curvas e predições consolidadas.
     """
+    exp_name = f"{arch_config['name']}_{representation}" if arch_config else representation
     filepaths, labels = load_dataset(data_dir)
     filepaths = np.array(filepaths)
     labels    = np.array(labels)
@@ -382,11 +384,11 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
     plt.figure(figsize=(7, 5))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=CLASSES, yticklabels=CLASSES)
-    plt.title(f'Confusion Matrix — {representation} ({k}-fold agregado)')
+    plt.title(f'Confusion Matrix — {exp_name} ({k}-fold agregado)')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig(f'confusion_matrix_{representation}.png', dpi=150)
+    plt.savefig(f'confusion_matrix_{exp_name}.png', dpi=150)
     plt.close()
 
     print(f'\n[{representation}] CV Acc: {cv_acc_mean:.2f}% ± {cv_acc_std:.2f}%')
@@ -394,7 +396,7 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
 
     # — Promove o melhor fold; descarta os demais —
     best_fold_idx = int(np.argmax(fold_accs))
-    final_path    = f'best_{representation}.pth'
+    final_path    = f'best_{exp_name}.pth'
     for i, h in enumerate(fold_histories):
         if i == best_fold_idx:
             os.rename(h['checkpoint'], final_path)
@@ -463,7 +465,7 @@ def plot_learning_curves(fold_histories, representation):
 
 def plot_ablation_comparison(results):
     """Gráfico de barras comparando as 3 representações (mean ± std)."""
-    labels = [r['representation'] for r in results]
+    labels = [r.get('arch_name', r['representation']) for r in results]
     means  = [r['cv_acc_mean']    for r in results]
     stds   = [r['cv_acc_std']     for r in results]
 

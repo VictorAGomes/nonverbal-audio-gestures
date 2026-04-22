@@ -24,6 +24,90 @@ SEED                    = 42
 EARLY_STOPPING_PATIENCE = 10    # epochs sem melhora antes de parar
 EARLY_STOPPING_MIN_DELTA = 1e-4 # melhora mínima considerada significativa
 
+ARCH_CONFIGS = [
+    {
+        'name':           'kernel_3x3_max',
+        'kernel':         (3, 3),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'max',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_3x3_avg',
+        'kernel':         (3, 3),
+        'filters':        [32, 64, 128],
+        'pooling':        'average',
+        'global_pooling': 'average',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_3x3_flatten',
+        'kernel':         (3, 3),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'flatten',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_5x5_max',
+        'kernel':         (5, 5),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'max',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_5x5_avg',
+        'kernel':         (5, 5),
+        'filters':        [32, 64, 128],
+        'pooling':        'average',
+        'global_pooling': 'average',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_5x5_flatten',
+        'kernel':         (5, 5),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'flatten',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_7x7_max',
+        'kernel':         (7, 7),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'max',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_7x7_avg',
+        'kernel':         (7, 7),
+        'filters':        [32, 64, 128],
+        'pooling':        'average',
+        'global_pooling': 'average',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+    {
+        'name':           'kernel_7x7_flatten',
+        'kernel':         (7, 7),
+        'filters':        [32, 64, 128],
+        'pooling':        'max',
+        'global_pooling': 'flatten',
+        'dropout':        0.3,
+        'batchnorm':      False,
+    },
+]
+
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
@@ -150,7 +234,7 @@ def load_dataset(data_dir):
 # TREINAMENTO — FOLD ÚNICO
 # =============================================================================
 def _train_single_fold(X_train, y_train, X_val, y_val,
-                       epochs, batch_size, lr, representation, fold_id):
+                       epochs, batch_size, lr, representation, fold_id, arch_config=None):
     """Treina um fold e retorna histórico de curvas e predições no val."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -163,7 +247,7 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
         batch_size=batch_size, shuffle=False
     )
 
-    model     = NonVerbalCNN(num_classes=NUM_CLASSES).to(device)
+    model     = NonVerbalCNN(num_classes=NUM_CLASSES, arch_config=arch_config).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
@@ -249,7 +333,7 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
 # TREINAMENTO — K-FOLD
 # =============================================================================
 def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
-                      representation='delta_delta', k=5):
+                      representation='delta_delta', k=5, arch_config=None):
     """K-fold stratified cross-validation com a NonVerbalCNN.
 
     Returns:
@@ -273,6 +357,7 @@ def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
             filepaths[val_idx].tolist(),   labels[val_idx].tolist(),
             epochs=epochs, batch_size=batch_size, lr=lr,
             representation=representation, fold_id=fold_id,
+            arch_config=arch_config
         )
         fold_histories.append(history)
         all_preds.extend(history['preds'])
@@ -460,14 +545,77 @@ def run_ablation(data_dir, epochs=50, batch_size=16, k=5):
     plot_ablation_comparison(all_results)
     return all_results
 
+
+def run_ablation_arch(data_dir, epochs=50, batch_size=16, k=5):
+    """Treina a NonVerbalCNN com k-fold para cada configuração arquitetural e salva resultados."""
+    all_results = []
+
+    for config in ARCH_CONFIGS:
+        print(f'\n{"#"*60}')
+        print(f'  ARQUITETURA: {config["name"]}')
+        print(f'{"#"*60}')
+
+        result = train_model_kfold(
+            data_dir, epochs=epochs, batch_size=batch_size,
+            representation='mel', k=k,
+            arch_config=config,
+        )
+
+        plot_learning_curves(result['fold_histories'], config['name'])
+        result['arch_name'] = config['name']
+        all_results.append(result)
+
+    # — CSV detalhado com métricas por classe —
+    csv_path = 'ablation_arch_results.csv'
+    fieldnames = ['arch_name', 'cv_acc_mean', 'cv_acc_std']
+    for cls in CLASSES:
+        fieldnames += [f'{cls}_precision', f'{cls}_recall', f'{cls}_f1']
+
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in all_results:
+            row = {
+                'arch_name':   r['arch_name'],
+                'cv_acc_mean': round(r['cv_acc_mean'], 2),
+                'cv_acc_std':  round(r['cv_acc_std'],  2),
+            }
+            for cls in CLASSES:
+                m = r['per_class'][cls]
+                row[f'{cls}_precision'] = round(m['precision'], 3)
+                row[f'{cls}_recall']    = round(m['recall'],    3)
+                row[f'{cls}_f1']        = round(m['f1-score'],  3)
+            writer.writerow(row)
+
+    # — Tabela resumo no terminal —
+    print(f'\n{"="*70}')
+    print('ABLATION ARQUITETURAL — RESULTADOS FINAIS')
+    print(f'{"="*70}')
+    print(f"{'Arquitetura':<22} {'CV Acc':>12}", end='')
+    for cls in CLASSES:
+        print(f'  {cls[:6]:>6} F1', end='')
+    print()
+    print('-' * 70)
+    for r in all_results:
+        print(f"{r['arch_name']:<22} "
+              f"{r['cv_acc_mean']:>6.2f}±{r['cv_acc_std']:.2f}%", end='')
+        for cls in CLASSES:
+            print(f"  {r['per_class'][cls]['f1-score']:>8.3f}", end='')
+        print()
+    print('=' * 70)
+    print(f'\nResultados salvos em: {csv_path}')
+
+    plot_ablation_comparison(all_results)
+    return all_results
+
+
 # =============================================================================
 # EXECUÇÃO PRINCIPAL
 # =============================================================================
 if __name__ == "__main__":
     data_dir = "data"
-
     print("Iniciando Ablation Study — Non-Verbal Audio Gestures")
     print(f"Classes: {CLASSES}")
     print(f"Mel Spectrogram: {N_MELS} mel bands | Image size: {IMG_SIZE}")
 
-    run_ablation(data_dir, epochs=50, batch_size=16, k=5)
+    run_ablation_arch(data_dir, epochs=50, batch_size=16, k=5)      # arquiteturas

@@ -1,6 +1,6 @@
 # 🎙️ Non-Verbal Audio Gestures Recognition
 
-Sistema de reconhecimento de gestos não-verbais por áudio usando Deep Learning. O projeto identifica sons como assobios e estalos de dedos em tempo real através de uma interface gráfica intuitiva.
+Sistema de reconhecimento de gestos não-verbais por áudio usando Deep Learning. O projeto identifica sons como assobios, estalos e palmas através de uma interface gráfica local e de um pipeline de treino voltado para batch.
 
 ## 🚀 Características
 
@@ -9,6 +9,15 @@ Sistema de reconhecimento de gestos não-verbais por áudio usando Deep Learning
 - **CNN Personalizada**: Modelo de Convolutional Neural Network treinado em mel-spectrogramas
 - **Data Augmentation**: Time-shifting, pitch-shifting e adição de ruído para melhorar generalização
 - **Arquitetura Modular**: Código organizado e reutilizável
+- **Treino em HPC**: Scripts prontos para Singularity + SLURM
+
+## 🖥️ Execução no NPAD
+
+O projeto já está preparado para rodar no supercomputador com Singularity.
+
+- Guia completo: [README_NPAD.md](README_NPAD.md)
+- Job batch: `train_job.sh`
+- Container: `cnn_env.def`
 
 ## 📋 Pré-requisitos
 
@@ -58,11 +67,11 @@ nonverbal-audio-gestures/
 ├── main.py                   # Script de teste de mel-spectrograma
 ├── augmentation.py           # Funções de data augmentation
 ├── requirements.txt          # Dependências do projeto
-├── best_nonverbal_model.pth  # Modelo treinado (após treinamento)
+├── best_<representation>.pth # Modelo treinado (após treinamento)
 └── data/                     # Dados de treinamento
-    ├── assobio/              # Áudios de assobio
-    ├── dedo/                 # Áudios de estalo de dedos
-    └── palma/                # Áudios de palmas (opcional)
+    ├── whistle/              # Áudios de assobio
+    ├── snap/                 # Áudios de estalo
+    └── clap/                 # Áudios de palmas
 ```
 
 ## 🎯 Como Usar
@@ -73,32 +82,34 @@ Organize seus arquivos de áudio na estrutura:
 
 ```
 data/
-├── assobio/
+├── whistle/
 │   ├── audio1.wav
 │   ├── audio2.opus
 │   └── ...
-├── dedo/
+├── snap/
 │   ├── audio1.wav
 │   ├── audio2.mp3
 │   └── ...
-└── palma/  # Opcional
+└── clap/
     └── ...
 ```
 
 Formatos suportados: `.wav`, `.mp3`, `.opus`, `.flac`, `.m4a`, `.ogg`
 
+Também há compatibilidade com nomes antigos em português: `assobio`, `dedo` e `palma`.
+
 ### 2. Treinar o Modelo
 
 ```bash
-python train.py
+python train.py --data-dir data --output-dir outputs/local
 ```
 
 O script irá:
 - Carregar os dados da pasta `data/`
 - Aplicar data augmentation
 - Treinar a CNN por 50 épocas
-- Salvar o melhor modelo como `best_nonverbal_model.pth`
-- Gerar matriz de confusão (`confusion_matrix.png`)
+- Salvar o melhor modelo como `best_<representation>.pth`
+- Gerar matriz de confusão e curvas de aprendizado dentro de `outputs/local`
 
 ### 3. Executar a Interface Gráfica
 
@@ -141,7 +152,7 @@ N_FFT = 1024            # Tamanho FFT
 HOP_LENGTH = 256        # Passo entre janelas
 N_MELS = 128            # Bandas Mel
 IMG_SIZE = (128, 128)   # Tamanho da imagem
-CLASSES = ['assobio', 'dedo']  # Classes a serem reconhecidas
+CLASSES = ['whistle', 'snap', 'clap']  # Classes reconhecidas internamente
 ```
 
 ## 📊 Data Augmentation
@@ -174,7 +185,7 @@ Após o treinamento, são gerados:
 2. Adicione arquivos de áudio nessa pasta
 3. Atualize `config.py`:
 ```python
-CLASSES = ['assobio', 'dedo', 'nova_classe']
+CLASSES = ['whistle', 'snap', 'clap', 'nova_classe']
 ```
 4. Retreine o modelo: `python train.py`
 
@@ -200,4 +211,3 @@ Contribuições são bem-vindas! Sinta-se à vontade para:
 Dúvidas ou sugestões? Entre em contato através do GitHub.
 
 ---
-

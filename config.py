@@ -12,9 +12,9 @@ IMG_SIZE = (128, 128)   # Tamanho final da imagem (altura, largura)
 
 # Classes
 CLASSES = [
-    "assobio",
-    "dedo",
-    "palma",
+    "whistle",
+    "snap",
+    "clap",
 ]
 NUM_CLASSES = len(CLASSES)
 CLASS_TO_IDX = {cls: i for i, cls in enumerate(CLASSES)}

@@ -184,3 +184,6 @@ data/
 augmented_specs/
 confusion_matrix.png
 best_nonverbal_model.pth
+outputs/
+slurm-*.out
+*.sif

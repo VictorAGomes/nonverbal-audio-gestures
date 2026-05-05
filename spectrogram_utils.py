@@ -20,13 +20,12 @@ def _resize(rgb_hwc, target_size):
     return t.squeeze(0).permute(1, 2, 0).numpy()                  # (H, W, 3)
 
 
-def spectrogram_to_image(S_db, target_size=IMG_SIZE, representation='delta_delta'):
+def spectrogram_to_image(S_db, target_size=IMG_SIZE, representation='mel'):
     """Converte um Mel-espectrograma em dB para um array float32 (H, W, 3) em [0, 1].
 
     Representações disponíveis:
-      'mel'         -> R=G=B=S_db  (apenas espectrograma, escala de cinza como RGB)
-      'delta'       -> R=S_db, G=delta, B=delta    (dinâmica de 1ª ordem)
-      'delta_delta' -> R=S_db, G=delta, B=delta2   (representação completa)
+      'mel'   -> R=G=B=S_db  (apenas espectrograma, escala de cinza como RGB)
+      'delta' -> R=S_db, G=delta, B=delta    (dinâmica de 1ª ordem)
 
     Cada canal é normalizado independentemente para [0, 1] em float32.
     Sem quantização para uint8 — precisão contínua preservada.
@@ -41,17 +40,9 @@ def spectrogram_to_image(S_db, target_size=IMG_SIZE, representation='delta_delta
         g = _normalize_channel(delta)
         rgb = np.stack([r, g, g], axis=-1)
 
-    elif representation == 'delta_delta':
-        delta  = librosa.feature.delta(S_db)
-        delta2 = librosa.feature.delta(S_db, order=2)
-        r = _normalize_channel(S_db)
-        g = _normalize_channel(delta)
-        b = _normalize_channel(delta2)
-        rgb = np.stack([r, g, b], axis=-1)
-
     else:
         raise ValueError(
-            f"representation deve ser 'mel', 'delta' ou 'delta_delta'. "
+            f"representation deve ser 'mel' ou 'delta'. "
             f"Recebido: '{representation}'"
         )
 

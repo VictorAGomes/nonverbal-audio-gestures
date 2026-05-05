@@ -182,7 +182,7 @@ def extract_mel_spectrogram(y, sr):
 # DATASET PYTORCH
 # =============================================================================
 class AudioDataset(Dataset):
-    def __init__(self, filepaths, labels, augment=False, representation='delta_delta'):
+    def __init__(self, filepaths, labels, augment=False, representation='mel'):
         self.filepaths      = filepaths
         self.labels         = labels
         self.augment        = augment
@@ -334,7 +334,7 @@ def _train_single_fold(X_train, y_train, X_val, y_val,
 # TREINAMENTO — K-FOLD
 # =============================================================================
 def train_model_kfold(data_dir, epochs=50, batch_size=16, lr=0.0005,
-                      representation='delta_delta', k=5, arch_config=None):
+                      representation='mel', k=5, arch_config=None):
     """K-fold stratified cross-validation com a NonVerbalCNN.
 
     Returns:
@@ -464,14 +464,15 @@ def plot_learning_curves(fold_histories, representation):
 
 
 def plot_ablation_comparison(results):
-    """Gráfico de barras comparando as 3 representações (mean ± std)."""
+    """Gráfico de barras comparando as representações avaliadas (mean ± std)."""
     labels = [r.get('arch_name', r['representation']) for r in results]
     means  = [r['cv_acc_mean']    for r in results]
     stds   = [r['cv_acc_std']     for r in results]
 
     fig, ax = plt.subplots(figsize=(7, 4))
+    palette = ['#4a90d9', '#e67e22', '#2ecc71']
     bars = ax.bar(labels, means, yerr=stds, capsize=6,
-                  color=['#4a90d9', '#e67e22', '#2ecc71'], alpha=0.85)
+                  color=palette[:len(labels)], alpha=0.85)
     ax.set_ylabel('CV Accuracy (%)')
     ax.set_title('Ablation Study — Representação do Espectrograma')
     ax.set_ylim(0, 105)
@@ -490,7 +491,7 @@ def plot_ablation_comparison(results):
 # =============================================================================
 def run_ablation(data_dir, epochs=50, batch_size=16, k=5):
     """Treina a NonVerbalCNN com k-fold para cada representação e salva resultados."""
-    representations = ['mel', 'delta', 'delta_delta']
+    representations = ['mel', 'delta']
     all_results = []
 
     for representation in representations:

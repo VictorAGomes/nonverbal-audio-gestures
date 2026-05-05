@@ -10,7 +10,7 @@ from spectrogram_utils import spectrogram_to_image
 from config import SR, DURATION, N_FFT, HOP_LENGTH, N_MELS, CLASSES, NUM_CLASSES
 
 # Representação usada no treino — deve coincidir com o checkpoint carregado
-REPRESENTATION  = 'delta_delta'
+REPRESENTATION  = 'mel'
 CHECKPOINT_PATH = f'best_{REPRESENTATION}.pth'
 
 
